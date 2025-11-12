@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🎄 Decorate Together – 3D Christmas Tree</title>
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+    .app { display: grid; grid-template-columns: 320px 1fr; height: 100%; }
+    .panel { background: #0f172a; color: #e5e7eb; padding: 16px; overflow: auto; }
+    .panel h1 { font-size: 18px; margin: 0 0 8px; }
+    .panel .muted { color: #94a3b8; font-size: 12px; }
+    .controls { display: grid; gap: 12px; margin-top: 12px; }
+    .card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 12px; }
+    label { display: block; font-size: 12px; color: #9ca3af; margin-bottom: 6px; }
+    input[type="text"], input[type="file"], input[type="color"], select, button { width: 100%; }
+    button { background: #22c55e; color: #0b0f19; border: none; border-radius: 10px; padding: 10px 12px; font-weight: 600; cursor: pointer; }
+    button.secondary { background: #334155; color: #e5e7eb; }
+    button.destructive { background: #ef4444; color: white; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .list { display: grid; gap: 8px; }
+    .list-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; background: #0b1220; border: 1px solid #1f2937; border-radius: 10px; padding: 8px; }
+    .list-item small { color: #9ca3af; }
+    .hint { font-size: 11px; color: #9ca3af; }
+    .canvas-wrap { position: relative; }
+    canvas { display: block; width: 100%; height: 100%; background: #0b0f19; }
+    .toast { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); background: rgba(17,24,39,.9); color: #e5e7eb; padding: 8px 12px; border-radius: 12px; border: 1px solid #1f2937; font-size: 12px; }
+    .linkbox { display:flex; gap:8px; align-items:center; background:#0b1220; border:1px solid #1f2937; padding:8px; border-radius:10px; }
+    .linkbox code { color:#e5e7eb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <h1>🎄 3D Christmas Tree</h1>
+    <div class="muted">Decorate together – just share this link. Anyone with the link can add ornaments. Each person can delete their own ornaments (client‑side check, see rules note in code).</div>
+
+    <div class="card controls">
+      <div class="row">
+        <div>
+          <label>Room ID (from URL)</label>
+          <input id="roomId" type="text" readonly />
+        </div>
+        <div>
+          <label>My Browser ID</label>
+          <input id="userId" type="text" readonly />
+        </div>
+      </div>
+      <div>
+        <label>Share</label>
+        <div class="linkbox"><code id="shareLink"></code><button id="copyBtn" class="secondary" title="Copy">Kopieren</button></div>
+        <div class="hint">Tip: Use the same link to decorate in the same room.</div>
+      </div>
+    </div>
+
+    <div class="card controls">
+      <h2 style="margin:0;font-size:14px">New Ornament</h2>
+      <div class="row">
+        <div>
+          <label>Color</label>
+          <input id="colorPicker" type="color" value="#ff3b3b" />
+        </div>
+        <div>
+          <label>Size</label>
+          <select id="size">
+            <option value="0.12">Small</option>
+            <option value="0.18" selected>Medium</option>
+            <option value="0.24">Large</option>
+          </select>
+        </div>
+      </div>
+      <button id="addColorBtn">Add color ornament</button>
+      <div>
+        <label>Or upload an image (used as a sphere texture) – no account needed</label>
+        <input id="fileInput" type="file" accept="image/*" />
+      </div>
+      <button id="addImageBtn" class="secondary">Add image ornament</button>
+      <div class="hint">Image is embedded (compressed) and tied to your browser ID. No account is created.</div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0;font-size:14px">My ornaments</h2>
+      <div id="mine" class="list"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0;font-size:14px">All ornaments in room</h2>
+      <div id="all" class="list"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0;font-size:14px">Setup (one‑time)
+      <ol class="hint">
+        <li>Create a Firebase project and enable <b>Firestore</b> (no Auth needed for easy mode).</li>
+        <li>Paste your Firebase config below.</li>
+        <li>Use the <b>public rules</b> shown in the code comment (easy but not secure) or keep the secure rules with Anonymous Auth (recommended).</li>
+        <li>Host this single file on GitHub Pages.</li>
+        <li>Share the link. Room ID = URL hash (everything after <code>#</code>).</li>
+      </ol>
+    </div>
+  </aside>
+
+  <main class="canvas-wrap" id="canvasWrap">
+    <div id="toast" class="toast" style="display:none"></div>
+  </main>
+</div>
+
+<!-- Three.js -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158/examples/js/controls/OrbitControls.js"></script>
+
+<!-- Firebase (Compat für einfache Nutzung im Browser) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-storage-compat.js"></script>
+
+<script>
+// ======= 🔧 Firebase konfigurieren (EINTRAGEN) =======
+// 1) Ersetze die Platzhalter unten durch deine Firebase Web‑Konfiguration.
+// 2) Öffne die Datei im Browser, die App initialisiert sich automatisch.
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+// ================================================
+
+// ---- Util UI ----
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  clearTimeout(showToast._to);
+  showToast._to = setTimeout(()=> t.style.display='none', 2200);
+}
+
+// ---- Raum / Link ----
+function getOrCreateRoomId() {
+  if (!location.hash) {
+    const r = Math.random().toString(36).slice(2, 8);
+    location.hash = r;
+    return r;
+  }
+  return location.hash.replace('#','');
+}
+const roomId = getOrCreateRoomId();
+const shareLink = location.origin + location.pathname + '#' + roomId;
+
+// ---- Three.js Szene ----
+let scene, camera, renderer, controls;
+let tree, star, roomGroup;
+const ornamentMeshes = new Map(); // docId -> Mesh
+
+init3D();
+function init3D() {
+  const wrap = document.getElementById('canvasWrap');
+  const w = wrap.clientWidth; const h = window.innerHeight;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b0f19);
+
+  // Kamera
+  camera = new THREE.PerspectiveCamera(60, w/h, 0.1, 100);
+  camera.position.set(0.8, 1.6, 2.8);
+
+  // Renderer
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(w, h);
+  renderer.shadowMap.enabled = true;
+  wrap.appendChild(renderer.domElement);
+
+  // Controls
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.target.set(0, 1.1, 0);
+
+  // Licht
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x334155, 1.0);
+  scene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+  dir.position.set(2, 3, 2);
+  dir.castShadow = true;
+  scene.add(dir);
+
+  // Boden / Wohnzimmer‑Teppich
+  const floorGeo = new THREE.PlaneGeometry(8, 8);
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x1f2937 });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI/2; floor.position.y = 0;
+  floor.receiveShadow = true; scene.add(floor);
+
+  // Wände minimalistisch
+  roomGroup = new THREE.Group();
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, side: THREE.BackSide });
+  const roomBox = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 10), wallMat);
+  roomBox.position.y = 2; roomBox.receiveShadow = true; roomGroup.add(roomBox);
+  // Fenster‑Lichter
+  const point = new THREE.PointLight(0xfff1b8, 0.8, 10); point.position.set(-2,2, -1); roomGroup.add(point);
+  scene.add(roomGroup);
+
+  // Baum (Kegel + Stamm)
+  const H = 2.2; const R = 1.0;
+  const coneGeo = new THREE.ConeGeometry(R, H, 64, 16);
+  const coneMat = new THREE.MeshStandardMaterial({ color: 0x0b8a2f, roughness: 0.9, metalness: 0.0 });
+  tree = new THREE.Mesh(coneGeo, coneMat); tree.position.y = H/2 + 0.2; tree.castShadow = true; tree.receiveShadow = true; scene.add(tree);
+
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.4, 24), new THREE.MeshStandardMaterial({ color: 0x6b3f1d }));
+  trunk.position.y = 0.2; trunk.castShadow = true; scene.add(trunk);
+
+  // Stern
+  star = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), new THREE.MeshStandardMaterial({ color: 0xffd54a, emissive: 0x443300 }));
+  star.position.set(0, H + 0.4, 0); star.castShadow = true; scene.add(star);
+
+  // Renderloop
+  function animate() {
+    requestAnimationFrame(animate);
+    star.rotation.y += 0.01;
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    const ww = wrap.clientWidth; const hh = window.innerHeight;
+    camera.aspect = ww/hh; camera.updateProjectionMatrix();
+    renderer.setSize(ww, hh);
+  });
+}
+
+// Hilfsfunktion: zufälliger Punkt auf der Baumoberfläche
+function randomPositionOnTree() {
+  const H = 2.2; const R = 1.0; // wie beim Kegel
+  const h = Math.random() * (H * 0.9) + H*0.05; // nicht ganz unten/oben
+  const r = (H - h) / H * R * 0.95;
+  const theta = Math.random() * Math.PI * 2;
+  const x = r * Math.cos(theta);
+  const z = r * Math.sin(theta);
+  const y = h + 0.2; // Baumposition berücksichtigen
+  return new THREE.Vector3(x, y, z);
+}
+
+function createOrnamentMesh({ color = 0xff0000, size = 0.18, textureURL = null }) {
+  const geo = new THREE.SphereGeometry(size, 32, 32);
+  const mat = textureURL ? new THREE.MeshStandardMaterial({ map: new THREE.TextureLoader().load(textureURL), metalness: 0.3, roughness: 0.4 })
+                         : new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.4 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  const p = randomPositionOnTree();
+  mesh.position.copy(p);
+  // kleine Kappe
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 12), new THREE.MeshStandardMaterial({ color: 0xcbd5e1 }));
+  cap.position.set(0, size + 0.03, 0); cap.castShadow = true; mesh.add(cap);
+  return mesh;
+}
+
+// ---- Firebase einrichten ----
+firebase.initializeApp(firebaseConfig);
+// no auth
+const db = firebase.firestore();
+
+// Generate a stable, anonymous browser ID (no account)
+const myBrowserId = (() => {
+  const KEY = 'xmas_browser_id_v1';
+  let v = localStorage.getItem(KEY);
+  if (!v) { v = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(KEY, v); }
+  return v;
+})();
+// no storage
+
+// no user accounts
+
+function ensureAuth(){ return Promise.resolve(null); }
+  return currentUser;
+}
+
+// Firestore Referenzen
+function roomCol() { return db.collection('rooms').doc(roomId).collection('ornaments'); }
+
+// UI Elemente füllen
+const roomIdEl = document.getElementById('roomId');
+const userIdEl = document.getElementById('userId');
+const shareEl = document.getElementById('shareLink');
+const copyBtn = document.getElementById('copyBtn');
+roomIdEl.value = roomId; shareEl.textContent = shareLink; copyBtn.onclick = () => { navigator.clipboard.writeText(shareLink); showToast('Link kopiert!'); };
+
+// Start
+// Start without auth
+userIdEl.value = (localStorage.getItem('xmas_browser_id_v1')||'??????').slice(0,6) + '…';
+subscribeToOrnaments(); alert('Auth fehlgeschlagen. Konfiguration korrekt?'); });
+
+// Live‑Sync
+function subscribeToOrnaments() {
+  roomCol().orderBy('createdAt', 'asc').onSnapshot((snap) => {
+    const mineList = document.getElementById('mine');
+    const allList = document.getElementById('all');
+    mineList.innerHTML = ''; allList.innerHTML = '';
+
+    const seen = new Set();
+
+    snap.docChanges().forEach(change => {
+      const doc = change.doc; const data = doc.data();
+      if (change.type === 'removed') {
+        // Mesh entfernen
+        const mesh = ornamentMeshes.get(doc.id);
+        if (mesh) { scene.remove(mesh); ornamentMeshes.delete(doc.id); }
+        return;
+      }
+      // hinzugefügt/geändert
+      if (!ornamentMeshes.has(doc.id)) {
+        const mesh = createOrnamentMesh({ color: data.color || 0xff0000, size: data.size || 0.18, textureURL: data.textureURL || null });
+        if (data.position) mesh.position.set(data.position.x, data.position.y, data.position.z);
+        scene.add(mesh); ornamentMeshes.set(doc.id, mesh);
+      }
+    });
+
+    // Listen neu aufbauen
+    snap.forEach(d => {
+      const data = d.data();
+      const isMine = data.ownerId === myBrowserId;
+
+      const liAll = document.createElement('div');
+      liAll.className = 'list-item';
+      liAll.innerHTML = `<div>${data.textureURL ? '🖼️ Bild‑' : '🔴 Farb‑'}Ornament · <small>${(data.size||0.18).toFixed(2)} · ${isMine ? 'yours' : 'someone'.}</small></div>`;
+      const noop = document.createElement('div'); liAll.appendChild(noop); allList.appendChild(liAll);
+
+      if (isMine) {
+        const liMine = document.createElement('div');
+        liMine.className = 'list-item';
+        const label = data.textureURL ? 'Image ornament' : 'Color ornament';
+        liMine.innerHTML = `<div>${label}<br/><small>${d.id.slice(0,6)}…</small></div>`;
+        const btn = document.createElement('button'); btn.className = 'destructive'; btn.textContent = 'Löschen';
+        btn.onclick = () => deleteOrnament(d.id, data);
+        liMine.appendChild(btn);
+        mineList.appendChild(liMine);
+      }
+    });
+  });
+}
+
+// Ornament anlegen (Farbe)
+async function addColorOrnament() {
+  const colorHex = document.getElementById('colorPicker').value; // z. B. #ff0000
+  const size = parseFloat(document.getElementById('size').value);
+  const pos = randomPositionOnTree();
+  await roomCol().add({
+    ownerId: myBrowserId,
+    type: 'color',
+    color: parseInt(colorHex.replace('#','0x')),
+    size,
+    position: { x: pos.x, y: pos.y, z: pos.z },
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  showToast('Ornament hinzugefügt');
+}
+
+// Ornament anlegen (Bild)
+async function addImageOrnament(file) {
+  if (!file) { alert('Please choose an image.'); return; }
+  const size = parseFloat(document.getElementById('size').value);
+  const imgDataUrl = await fileToDataURL(file, 256); // compress to ~256px
+  const pos = randomPositionOnTree();
+  await roomCol().add({
+    ownerId: myBrowserId,
+    type: 'image',
+    textureURL: imgDataUrl,
+    size,
+    position: { x: pos.x, y: pos.y, z: pos.z },
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  showToast('Image ornament added');
+}
+
+function fileToDataURL(file, maxDim=256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+  const size = parseFloat(document.getElementById('size').value);
+  const ext = file.name.split('.').pop();
+  const path = `rooms/${roomId}/uploads/${currentUser.uid}/${Date.now()}.${ext}`;
+  const ref = storage.ref().child(path);
+  await ref.put(file, { contentType: file.type });
+  const url = await ref.getDownloadURL();
+  const pos = randomPositionOnTree();
+  await roomCol().add({
+    ownerId: myBrowserId,
+    type: 'image',
+    textureURL: url,
+    storagePath: path,
+    size,
+    position: { x: pos.x, y: pos.y, z: pos.z },
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  showToast('Bild‑Ornament hinzugefügt');
+}
+
+// Eigenes Ornament löschen
+async function deleteOrnament(id, data) {
+  try {
+    if (data.ownerId !== myBrowserId) { alert('You can only delete your own ornaments.'); return; }
+    await roomCol().doc(id).delete();
+    showToast('Deleted');
+  } catch (e) {
+    console.error(e);
+    alert('Delete failed. Check Firestore rules or network.');
+  }
+});
+    }
+    showToast('Gelöscht');
+  } catch (e) {
+    console.error(e);
+    alert('Löschen nicht erlaubt (nur eigene Ornamente) oder Konfiguration prüfen.');
+  }
+}
+
+// Buttons
+document.getElementById('addColorBtn').onclick = addColorOrnament;
+
+document.getElementById('addImageBtn').onclick = async () => {
+  const f = document.getElementById('fileInput').files[0];
+  await addImageOrnament(f);
+};
+
+// Inputs füllen
+shareEl.textContent = shareLink;
+
+// Formularfelder initialisieren
+(function initUI(){
+  document.getElementById('roomId').value = roomId;
+})();
+</script>
+
+<!--
+📜 Firebase Sicherheitsregeln (Beispiel)
+
+// Firestore (nur Eigentümer darf sein Dokument löschen, jeder darf lesen & eigene schreiben)
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /rooms/{roomId}/ornaments/{ornamentId} {
+      allow read: if true; // öffentlich lesbar für Link‑Besitzer
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if false; // optional: keine Updates (nur löschen/neu anlegen)
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+  }
+}
+
+// Storage (nur Eigentümer darf eigene Uploads verwalten)
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /rooms/{roomId}/uploads/{uid}/{fileName} {
+      allow read: if true; // Vorschaubilder
+      allow write: if request.auth != null && request.auth.uid == uid;
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
+
+💡 Hinweise
+- Zugriff via Link: Die Raum‑ID steckt im URL‑Hash (#abc123). Wer den Link hat, landet im selben Firestore‑„Raum“.
+- Anonyme Authentifizierung reicht: Aktivieren in Firebase Authentication > Sign‑in method > Anonymous.
+- Missbrauchsschutz: Optional Cloud Function, die alte Ornamente nach X Tagen entfernt; oder reCAPTCHA Enterprise.
+- DSGVO: Weist die Nutzer auf Bild‑Uploads hin (öffentliche Sichtbarkeit für Link‑Besitzer); ggf. Content‑Moderation ergänzen.
+-->
+
+</body>
+</html>
