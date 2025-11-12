@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>🎄 Gemeinsam dekorieren – 3D‑Weihnachtsbaum</title>
+  <title>🎄 Decorate Together – 3D Christmas Tree</title>
   <style>
     html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
     .app { display: grid; grid-template-columns: 320px 1fr; height: 100%; }
@@ -32,70 +32,70 @@
 <body>
 <div class="app">
   <aside class="panel">
-    <h1>🎄 3D‑Weihnachtsbaum</h1>
-    <div class="muted">Gemeinsam schmücken – einfach diesen Link teilen. Jeder mit dem Link kann Ornamente hinzufügen. Nutzer dürfen <b>nur ihre eigenen</b> Ornamente löschen.</div>
+    <h1>🎄 3D Christmas Tree</h1>
+    <div class="muted">Decorate together – just share this link. Anyone with the link can add ornaments. Each person can delete their own ornaments (client‑side check, see rules note in code).</div>
 
     <div class="card controls">
       <div class="row">
         <div>
-          <label>Raum‑ID (aus URL)</label>
+          <label>Room ID (from URL)</label>
           <input id="roomId" type="text" readonly />
         </div>
         <div>
-          <label>Mein Nutzer</label>
+          <label>My Browser ID</label>
           <input id="userId" type="text" readonly />
         </div>
       </div>
       <div>
-        <label>Teilen</label>
-        <div class="linkbox"><code id="shareLink"></code><button id="copyBtn" class="secondary" title="Kopieren">Kopieren</button></div>
-        <div class="hint">Tipp: Nutzt denselben Link, um im gleichen Raum zu schmücken.</div>
+        <label>Share</label>
+        <div class="linkbox"><code id="shareLink"></code><button id="copyBtn" class="secondary" title="Copy">Kopieren</button></div>
+        <div class="hint">Tip: Use the same link to decorate in the same room.</div>
       </div>
     </div>
 
     <div class="card controls">
-      <h2 style="margin:0;font-size:14px">Neues Ornament</h2>
+      <h2 style="margin:0;font-size:14px">New Ornament</h2>
       <div class="row">
         <div>
-          <label>Farbe</label>
+          <label>Color</label>
           <input id="colorPicker" type="color" value="#ff3b3b" />
         </div>
         <div>
-          <label>Größe</label>
+          <label>Size</label>
           <select id="size">
-            <option value="0.12">Klein</option>
-            <option value="0.18" selected>Mittel</option>
-            <option value="0.24">Groß</option>
+            <option value="0.12">Small</option>
+            <option value="0.18" selected>Medium</option>
+            <option value="0.24">Large</option>
           </select>
         </div>
       </div>
-      <button id="addColorBtn">Farbkugel hinzufügen</button>
+      <button id="addColorBtn">Add color ornament</button>
       <div>
-        <label>Oder Bild hochladen (wird als Kugel‑Textur verwendet)</label>
+        <label>Or upload an image (used as a sphere texture) – no account needed</label>
         <input id="fileInput" type="file" accept="image/*" />
       </div>
-      <button id="addImageBtn" class="secondary">Bild‑Ornament hinzufügen</button>
-      <div class="hint">Bild wird in Firebase Storage hochgeladen und nur von dir löschbar.</div>
+      <button id="addImageBtn" class="secondary">Add image ornament</button>
+      <div class="hint">Image is embedded (compressed) and tied to your browser ID. No account is created.</div>
     </div>
 
     <div class="card">
-      <h2 style="margin:0;font-size:14px">Meine Ornamente</h2>
+      <h2 style="margin:0;font-size:14px">My ornaments</h2>
       <div id="mine" class="list"></div>
     </div>
 
     <div class="card">
-      <h2 style="margin:0;font-size:14px">Alle Ornamente im Raum</h2>
+      <h2 style="margin:0;font-size:14px">All ornaments in room</h2>
       <div id="all" class="list"></div>
     </div>
 
     <div class="card">
-      <h2 style="margin:0;font-size:14px">Setup (einmalig)</h2>
+      <h2 style="margin:0;font-size:14px">Setup (one‑time)
       <ol class="hint">
-        <li>Erstelle ein Firebase‑Projekt (Firestore + Storage aktivieren).</li>
-        <li>Trage unten deine Firebase‑Konfiguration ein.</li>
-        <li>Setze die Sicherheitsregeln aus dem Kommentar im Code (nur Eigentümer darf löschen).</li>
-        <li>Hoste die Datei z. B. bei Vercel/Netlify/GitHub Pages.</li>
-        <li>Teile den Link. Raum‑ID = URL‑Hash (Alles nach <code>#</code>).</li>
+        <li>Create a Firebase project and enable <b>Firestore</b> (no Auth needed for easy mode).</li>
+        <li>Paste your Firebase config below.</li>
+        <li>Use the <b>public rules</b> shown in the code comment (easy but not secure) or keep the secure rules with Anonymous Auth (recommended).</li>
+        <li>Host this single file on GitHub Pages.</li>
+        <li>Share the link. Room ID = URL hash (everything after <code>#</code>).</li>
       </ol>
     </div>
   </aside>
@@ -258,15 +258,21 @@ function createOrnamentMesh({ color = 0xff0000, size = 0.18, textureURL = null }
 
 // ---- Firebase einrichten ----
 firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
+// no auth
 const db = firebase.firestore();
-const storage = firebase.storage();
 
-let currentUser = null;
+// Generate a stable, anonymous browser ID (no account)
+const myBrowserId = (() => {
+  const KEY = 'xmas_browser_id_v1';
+  let v = localStorage.getItem(KEY);
+  if (!v) { v = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(KEY, v); }
+  return v;
+})();
+// no storage
 
-async function ensureAuth() {
-  const cred = await auth.signInAnonymously();
-  currentUser = cred.user; // { uid }
+// no user accounts
+
+function ensureAuth(){ return Promise.resolve(null); }
   return currentUser;
 }
 
@@ -281,10 +287,9 @@ const copyBtn = document.getElementById('copyBtn');
 roomIdEl.value = roomId; shareEl.textContent = shareLink; copyBtn.onclick = () => { navigator.clipboard.writeText(shareLink); showToast('Link kopiert!'); };
 
 // Start
-ensureAuth().then(() => {
-  userIdEl.value = currentUser.uid.slice(0,6) + '…';
-  subscribeToOrnaments();
-}).catch(e => { console.error(e); alert('Auth fehlgeschlagen. Konfiguration korrekt?'); });
+// Start without auth
+userIdEl.value = (localStorage.getItem('xmas_browser_id_v1')||'??????').slice(0,6) + '…';
+subscribeToOrnaments(); alert('Auth fehlgeschlagen. Konfiguration korrekt?'); });
 
 // Live‑Sync
 function subscribeToOrnaments() {
@@ -314,17 +319,17 @@ function subscribeToOrnaments() {
     // Listen neu aufbauen
     snap.forEach(d => {
       const data = d.data();
-      const isMine = data.userId === (currentUser && currentUser.uid);
+      const isMine = data.ownerId === myBrowserId;
 
       const liAll = document.createElement('div');
       liAll.className = 'list-item';
-      liAll.innerHTML = `<div>${data.textureURL ? '🖼️ Bild‑' : '🔴 Farb‑'}Ornament · <small>${(data.size||0.18).toFixed(2)} · ${isMine ? 'deins' : 'von jemandem'}</small></div>`;
+      liAll.innerHTML = `<div>${data.textureURL ? '🖼️ Bild‑' : '🔴 Farb‑'}Ornament · <small>${(data.size||0.18).toFixed(2)} · ${isMine ? 'yours' : 'someone'.}</small></div>`;
       const noop = document.createElement('div'); liAll.appendChild(noop); allList.appendChild(liAll);
 
       if (isMine) {
         const liMine = document.createElement('div');
         liMine.className = 'list-item';
-        const label = data.textureURL ? 'Bild‑Ornament' : 'Farb‑Ornament';
+        const label = data.textureURL ? 'Image ornament' : 'Color ornament';
         liMine.innerHTML = `<div>${label}<br/><small>${d.id.slice(0,6)}…</small></div>`;
         const btn = document.createElement('button'); btn.className = 'destructive'; btn.textContent = 'Löschen';
         btn.onclick = () => deleteOrnament(d.id, data);
@@ -341,7 +346,7 @@ async function addColorOrnament() {
   const size = parseFloat(document.getElementById('size').value);
   const pos = randomPositionOnTree();
   await roomCol().add({
-    userId: currentUser.uid,
+    ownerId: myBrowserId,
     type: 'color',
     color: parseInt(colorHex.replace('#','0x')),
     size,
@@ -353,7 +358,41 @@ async function addColorOrnament() {
 
 // Ornament anlegen (Bild)
 async function addImageOrnament(file) {
-  if (!file) { alert('Bitte ein Bild wählen.'); return; }
+  if (!file) { alert('Please choose an image.'); return; }
+  const size = parseFloat(document.getElementById('size').value);
+  const imgDataUrl = await fileToDataURL(file, 256); // compress to ~256px
+  const pos = randomPositionOnTree();
+  await roomCol().add({
+    ownerId: myBrowserId,
+    type: 'image',
+    textureURL: imgDataUrl,
+    size,
+    position: { x: pos.x, y: pos.y, z: pos.z },
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  showToast('Image ornament added');
+}
+
+function fileToDataURL(file, maxDim=256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
   const size = parseFloat(document.getElementById('size').value);
   const ext = file.name.split('.').pop();
   const path = `rooms/${roomId}/uploads/${currentUser.uid}/${Date.now()}.${ext}`;
@@ -362,7 +401,7 @@ async function addImageOrnament(file) {
   const url = await ref.getDownloadURL();
   const pos = randomPositionOnTree();
   await roomCol().add({
-    userId: currentUser.uid,
+    ownerId: myBrowserId,
     type: 'image',
     textureURL: url,
     storagePath: path,
@@ -376,11 +415,14 @@ async function addImageOrnament(file) {
 // Eigenes Ornament löschen
 async function deleteOrnament(id, data) {
   try {
-    // Firestore löschen – Sicherheitsregeln prüfen Eigentümer
+    if (data.ownerId !== myBrowserId) { alert('You can only delete your own ornaments.'); return; }
     await roomCol().doc(id).delete();
-    // Falls Bild, auch Storage versuchen (Regeln erlauben nur Eigentümer)
-    if (data.storagePath) {
-      await storage.ref().child(data.storagePath).delete().catch(()=>{});
+    showToast('Deleted');
+  } catch (e) {
+    console.error(e);
+    alert('Delete failed. Check Firestore rules or network.');
+  }
+});
     }
     showToast('Gelöscht');
   } catch (e) {
